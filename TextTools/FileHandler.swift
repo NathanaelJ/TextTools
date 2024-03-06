@@ -7,28 +7,66 @@
 
 import Foundation
 
-class FileHandler {
-    func replaceTextInFiles(files: String, findText: String, replaceText: String) -> [String: String] {
-        var results: [String: String] = [:]
+class Logger: ObservableObject {
+    @Published var outputText = ""
+
+    // Function to log messages
+    func log(_ message: String) {
+        outputText += "\(message)\n"
+    }
+
+    // Clear the log
+    func clearLog() {
+        outputText = ""
+    }
+}
+
+class FileHandler: ObservableObject {
+    // Use logger
+    let logger: Logger
+
+    init(logger: Logger) {
+        self.logger = logger
+    }
+    
+    
+    func replaceTextInFiles(files: String, findText: String, replaceText: String) {
         let filesArray = expandWildcards(pattern: files)
-        
-        print("FIND: \(findText)")
-        print("REPLACE: \(replaceText)")
 
         for filePath in filesArray {
-            print(filePath)
-            
             // Perform the text replacement in each file
             if let content = readFileContent(filePath: filePath) {
                 let updatedContent = content.replacingOccurrences(of: findText, with: replaceText)
                 writeToFile(filePath: filePath, content: updatedContent)
-                results[filePath] = "Success."
+                logger.log("\(filePath): Success")
             } else {
-                results[filePath] = "Error reading file."
+                logger.log("\(filePath): Error reading file.")
             }
         }
 
-        return results
+        return
+    }
+    
+    func findOccurrencesInFiles(files: String, findText: String) {
+        let filesArray = expandWildcards(pattern: files)
+
+        for filePath in filesArray {
+            // Perform the text search in each file
+            if let content = readFileContent(filePath: filePath) {
+                let occurrences = content.components(separatedBy: findText).count - 1
+                logger.log("\(filePath): \(occurrences)")
+            } else {
+                logger.log("\(filePath): Error reading file.")
+            }
+        }
+    }
+    
+    func findFiles(files: String) {
+        let filesArray = expandWildcards(pattern: files)
+
+        for filePath in filesArray {
+            logger.log(filePath)
+        }
     }
 
     func expandWildcards(pattern: String) -> [String] {
@@ -51,7 +89,7 @@ class FileHandler {
             let content = try String(contentsOfFile: filePath, encoding: .utf8)
             return content
         } catch {
-            print("Error reading file: \(error.localizedDescription)")
+            logger.log("Error reading file: \(error.localizedDescription)")
             return nil
         }
     }
@@ -60,7 +98,7 @@ class FileHandler {
         do {
             try content.write(toFile: filePath, atomically: true, encoding: .utf8)
         } catch {
-            print("Error writing to file: \(error.localizedDescription)")
+            logger.log("Error writing to file: \(error.localizedDescription)")
         }
     }
 }

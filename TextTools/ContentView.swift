@@ -10,72 +10,134 @@ import AppKit
 
 struct ContentView: View {
     @State private var filesText = ""
-    @State private var findText = ""
-    @State private var replaceText = ""
-    @State private var outputText = ""
+    @State private var findTexts = ["", "", ""]
+    @State private var replaceTexts = ["", "", ""]
+    @StateObject private var logger = Logger()
     @State private var selectedFilePath: String?
-
+    @State private var showAlert = false
+    
+    @State private var clearFindBoxes = [false, false, false]
+    @State private var clearReplaceBoxes = [false, false, false]
+    
+    init() {
+            // Initialize filesText with the user's home directory
+            let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+            _filesText = State(initialValue: homeDirectory.path)
+        }
+    
     var body: some View {
         VStack {
             HStack {
                 Button("Open File", action: openFile)
                     .padding()
                 
-                TextField("File(s)", text: $filesText)
+                TextField("", text: $filesText)
                     .padding()
                     .textFieldStyle(RoundedBorderTextFieldStyle())
             }
-
-            HStack {
-                VStack {
-                    Text("Find")
-                    TextEditor(text: $findText)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                }
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                
-                VStack {
-                    Text("Replace")
-                    TextEditor(text: $replaceText)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                }
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(minHeight: 200)
-            .padding()
             
-            Button("Run") {
-                let fileHandler = FileHandler()
-                let results = fileHandler.replaceTextInFiles(files: filesText, findText: findText, replaceText: replaceText)
-                
-                var outputResult = ""
-                for (filePath, result) in results {
-                    outputResult += "\(filePath): \(result)\n"
+            ForEach(0..<3) { index in
+                HStack {
+                    VStack {
+                        HStack{
+                            Text("Find")
+                                .font(.headline)
+                                .padding([.leading])
+                            Spacer()
+                            Toggle("Clear on run", isOn: $clearFindBoxes[index])
+                                .padding([.trailing])
+                        }
+                        TextEditor(text: $findTexts[index])
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    }
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    
+                    VStack {
+                        HStack{
+                            Text("Replace")
+                                .font(.headline)
+                                .padding([.leading])
+                            Spacer()
+                            Toggle("Clear on run", isOn: $clearReplaceBoxes[index])
+                                .padding([.trailing])
+                        }
+                        TextEditor(text: $replaceTexts[index])
+                            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    }
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 }
-                outputText = outputResult
-                
-                // Clear find and replace text boxes
-                findText = ""
-                replaceText = ""
+                .frame(minHeight: 100)
+                .padding()
+            }
+            
+            HStack{
+                Button("Find Files") {
+                    logger.clearLog()
+                    
+                    let fileHandler = FileHandler(logger: logger)
+                    fileHandler.findFiles(files: filesText)
+                }
+                Button("Find Text") {
+                    logger.clearLog()
+                    
+                    let fileHandler = FileHandler(logger: logger)
+                    for (index, findText) in findTexts.enumerated() {
+                        if !findText.isEmpty {
+                            logger.log("====> Searching field \(index+1)")
+                            fileHandler.findOccurrencesInFiles(files: filesText, findText: findText)
+                        }
+                    }
+                }
+                Button("Find & Replace") {
+                    logger.clearLog()
+                    
+                    let fileHandler = FileHandler(logger: logger)
+                    for (index, findText) in findTexts.enumerated() {
+                        if !findText.isEmpty {
+                            logger.log("====> Searching field \(index+1)")
+                            fileHandler.replaceTextInFiles(files: filesText, findText: findText, replaceText: replaceTexts[index])
+                            if clearFindBoxes[index] {
+                                findTexts[index] = ""
+                            }
+                            if clearReplaceBoxes[index] {
+                                replaceTexts[index] = ""
+                            }
+                        }
+                    }
+                }
+                Button("Clear Fields") {
+                    showAlert = true
+                }
+                .alert("Warning", isPresented: $showAlert) {
+                    Button("Clear") {
+                        clearFields()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    Button("Cancel") {}
+                } message: {
+                    Text("Are you sure you want to clear all fields?")
+                }
             }
             .padding()
             
             // Display the result of print commands in a ScrollView
-            VStack {
-                Text("Output")
-                    .font(.headline)
-                ScrollView(.vertical) {
-                    Text(outputText)
+            ScrollView(.vertical) {
+                ScrollViewReader { proxy in
+                    Text(logger.outputText)
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .lineLimit(nil) // No limit on lines
                         .multilineTextAlignment(.leading)
+                        .id("scrollToEnd")
+                        .onChange(of: logger.outputText) {
+                            // Scroll to the bottom when the content updates
+                            withAnimation {
+                                proxy.scrollTo("scrollToEnd", anchor: .bottom)
+                            }
+                        }
                 }
-                .border(Color.gray, width: 1)
-                .frame(height: 100)
             }
+            .frame(height: 100)
         }
         .padding()
     }
@@ -99,6 +161,13 @@ struct ContentView: View {
         } else {
             // User clicked on "Cancel"
             return
+        }
+    }
+    
+    private func clearFields() {
+        for (index, _) in findTexts.enumerated() {
+            findTexts[index] = ""
+            replaceTexts[index] = ""
         }
     }
 }
